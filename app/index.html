@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>职业求职助手 演示</title>
+    <script>
+      window.__caAssetFailures = [];
+      function __caAssetFailed(name) {
+        if (window.__caAssetFailures.indexOf(name) < 0) window.__caAssetFailures.push(name);
+        if (window.CareerAgent && window.CareerAgent.onAssetFailure) window.CareerAgent.onAssetFailure(name);
+      }
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css"
+      onerror="__caAssetFailed('图标库 Font Awesome')"
+    />
+    <script src="https://cdn.tailwindcss.com" onerror="__caAssetFailed('样式库 Tailwind CSS')"></script>
+
+    <script defer src="domain/constants.js"></script>
+    <script defer src="domain/validate.js"></script>
+    <script defer src="domain/selectors.js"></script>
+    <script defer src="fixtures/demo-data.js"></script>
+    <script defer src="data/storage.js"></script>
+    <script defer src="data/workspace.js"></script>
+    <script defer src="data/phase2-commands.js"></script>
+    <script defer src="data/phase3-commands.js"></script>
+    <script defer src="lib/pdf-text.js"></script>
+    <script defer src="lib/revise-suggestions.js"></script>
+    <script defer src="lib/revise-prompt.js"></script>
+    <script defer src="lib/ai-provider.js"></script>
+    <script defer src="components/ui.js"></script>
+    <script defer src="components/router.js"></script>
+    <script defer src="components/shell.js"></script>
+    <script defer src="features/shared.js"></script>
+    <script defer src="features/home.js"></script>
+    <script defer src="features/progress.js"></script>
+    <script defer src="features/vault.js"></script>
+    <script defer src="features/jobs.js"></script>
+    <script defer src="features/prepare.js"></script>
+    <script defer src="features/interviews.js"></script>
+    <script defer src="features/resume.js"></script>
+    <script defer src="features/revise-resume.js"></script>
+    <script defer src="features/assistant.js"></script>
+    <script defer src="main.js"></script>
+  </head>
+  <body class="ca-body antialiased">
+    <a class="ca-skip" href="#ca-main" onclick="document.getElementById('ca-main').focus(); return false;">跳到主要内容</a>
+
+    <div id="ca-asset-warning" class="ca-asset-warning" role="alert" hidden></div>
+
+    <header class="ca-header">
+      <div class="ca-brand">
+        <div class="ca-brand__title-group">
+          <span class="ca-brand__name">职业求职助手</span>
+          <span class="ca-brand__tagline">把经历整理成下一步行动</span>
+        </div>
+        <span class="ca-demo-mark" title="页面中的人物、公司、经历与日期均为虚构合成内容">合成演示数据｜Demo Beta</span>
+      </div>
+      <div class="ca-header__controls">
+        <div class="ca-goal">
+          <label for="ca-goal-select" class="ca-goal__label">当前求职目标</label>
+          <select id="ca-goal-select" class="ca-input ca-input--sm" disabled>
+            <option value="">读取中…</option>
+          </select>
+          <span id="ca-goal-hint" class="ca-goal__hint" aria-live="polite"></span>
+        </div>
+        <button id="ca-reset" type="button" class="ca-btn ca-btn--ghost ca-btn--sm" disabled>
+          <i class="fa fa-undo ca-icon" aria-hidden="true"></i><span>重置演示</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="ca-layout">
+      <nav class="ca-nav" aria-label="主导航">
+        <section class="ca-profile-card" aria-labelledby="ca-profile-title">
+          <div class="ca-profile-avatar" aria-hidden="true">林</div>
+          <div>
+            <h2 id="ca-profile-title">林小舟</h2>
+            <p>求职进展进行中</p>
+          </div>
+          <dl>
+            <div><dt>目标岗位</dt><dd>产品经理</dd></div>
+            <div><dt>期望薪资</dt><dd>未设置</dd></div>
+          </dl>
+        </section>
+        <ul class="ca-nav__list">
+          <li>
+            <a class="ca-nav__link" href="#/home" data-route="home"
+              ><i class="fa fa-compass ca-icon" aria-hidden="true"></i><span>求职进展</span></a
+            >
+          </li>
+          <li>
+            <a class="ca-nav__link" href="#/resume" data-route="resume"
+              ><i class="fa fa-file-text-o ca-icon" aria-hidden="true"></i><span>我的简历</span></a
+            >
+          </li>
+          <li>
+            <a class="ca-nav__link" href="#/vault" data-route="vault"
+              ><i class="fa fa-archive ca-icon" aria-hidden="true"></i><span>职业资产</span></a
+            >
+          </li>
+          <li>
+            <a class="ca-nav__link" href="#/jobs" data-route="jobs"
+              ><i class="fa fa-briefcase ca-icon" aria-hidden="true"></i><span>岗位工作区</span></a
+            >
+          </li>
+        </ul>
+        <p id="ca-storage-note" class="ca-nav__note">保存位置：当前浏览器本地（不同步云端）</p>
+        <p class="ca-nav__note ca-nav__note--extra">演示 Beta：未接入真实 AI、自动投递或账号系统。</p>
+      </nav>
+
+      <main id="ca-main" class="ca-main" tabindex="-1">
+        <div id="ca-banners" class="ca-banners"></div>
+        <div id="ca-view">
+          <noscript>
+            <div class="ca-state ca-state--error">
+              <p class="ca-state__title">需要启用 JavaScript</p>
+              <p class="ca-state__message">本演示页面依赖浏览器脚本读取本地演示数据，请启用 JavaScript 后刷新。</p>
+            </div>
+          </noscript>
+          <div id="ca-boot" class="ca-state ca-state--loading" role="status">
+            <p class="ca-state__title">正在加载页面脚本…</p>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div id="ca-toasts" class="ca-toasts" role="status" aria-live="polite"></div>
+
+    <script>
+      setTimeout(function () {
+        if (window.CareerAgent && window.CareerAgent.booted) return;
+        var boot = document.getElementById('ca-boot');
+        if (!boot) return;
+        boot.className = 'ca-state ca-state--error';
+        boot.setAttribute('role', 'alert');
+        boot.innerHTML = '';
+        var title = document.createElement('p');
+        title.className = 'ca-state__title';
+        title.textContent = '页面脚本未能完成加载';
+        var msg = document.createElement('p');
+        msg.className = 'ca-state__message';
+        msg.textContent = '本地脚本文件缺失或执行出错，页面无法显示演示数据。请确认 app 目录完整后刷新；如仍失败，可在浏览器控制台查看错误。';
+        boot.appendChild(title);
+        boot.appendChild(msg);
+      }, 6000);
+    </script>
+  </body>
+</html>

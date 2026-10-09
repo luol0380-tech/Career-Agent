@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# 这些目录只存本地敏感资料；公开合成样例使用单独目录。
+assets/private/
+local-data/
