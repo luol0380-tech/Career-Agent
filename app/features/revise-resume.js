@@ -14,14 +14,10 @@
   var busy = false;
   var appRef = null;
   var session = null;
-  var configDraft = {
-    provider: 'deepseek',
-    model: 'deepseek-chat',
-    baseUrl: 'https://api.deepseek.com',
-    apiKey: ''
-  };
   var configBusy = false;
   var configMessage = null;
+  var statusRefreshStarted = false;
+  var statusCheckedOnce = false;
 
   function hasReadableText(file) {
     return !!(file && file.textDraft && String(file.textDraft).trim());
@@ -60,7 +56,7 @@
   function phaseLabel(phase) {
     return (
       {
-        unconfigured: '未配置',
+        unconfigured: '未接入',
         pending_verify: '已配置待验证',
         verified: '验证成功',
         failed: '验证失败'
@@ -80,79 +76,35 @@
     );
   }
 
-  function syncConfigDraftFromStatus(st) {
-    var defaults = (st && st.defaults) || {};
-    if (st && st.configured) {
-      configDraft.provider = st.providerId || defaults.provider || 'deepseek';
-      configDraft.model = st.model || defaults.model || 'deepseek-chat';
-      configDraft.baseUrl = st.baseUrl || defaults.baseUrl || '';
-      configDraft.apiKey = '';
-    } else {
-      configDraft.provider = defaults.provider || 'deepseek';
-      configDraft.model = defaults.model || 'deepseek-chat';
-      configDraft.baseUrl = defaults.baseUrl || 'https://api.deepseek.com';
-      configDraft.apiKey = '';
-    }
+  function ensureBackendStatus(ctx) {
+    if (statusRefreshStarted || statusCheckedOnce) return;
+    if (!AI.refreshStatus) return;
+    statusRefreshStarted = true;
+    AI.refreshStatus().then(
+      function () {
+        statusRefreshStarted = false;
+        statusCheckedOnce = true;
+        if (ctx && ctx.app) ctx.app.rerender();
+      },
+      function () {
+        statusRefreshStarted = false;
+        statusCheckedOnce = true;
+        if (ctx && ctx.app) ctx.app.rerender();
+      }
+    );
   }
 
-  function renderModelConfigPanel(ctx) {
+  function renderBackendStatusPanel(ctx) {
+    ensureBackendStatus(ctx);
     var st = AI.getStatus();
     var phase = st.configPhase || (st.configured ? 'pending_verify' : 'unconfigured');
     var tone = phase === 'verified' ? 'ok' : phase === 'failed' || phase === 'unconfigured' ? 'warn' : 'info';
-    var providers = st.providers || AI.PROVIDERS || {};
-
-    var providerSelect = h('select', { id: 'ai-provider', class: 'ca-input' });
-    Object.keys(providers).forEach(function (id) {
-      var opt = h('option', { value: id }, providers[id].label || id);
-      if (id === configDraft.provider) opt.selected = true;
-      providerSelect.appendChild(opt);
-    });
-    providerSelect.addEventListener('change', function () {
-      configDraft.provider = providerSelect.value;
-      var meta = providers[configDraft.provider];
-      if (meta) {
-        if (!configDraft.model || configDraft.model === 'deepseek-chat' || configDraft.model === 'gpt-4o-mini') {
-          configDraft.model = meta.defaultModel;
-        }
-        if (meta.defaultBaseUrl) configDraft.baseUrl = meta.defaultBaseUrl;
-      }
-      ctx.app.rerender();
-    });
-
-    var modelInput = h('input', {
-      id: 'ai-model',
-      class: 'ca-input',
-      type: 'text',
-      value: configDraft.model,
-      autocomplete: 'off'
-    });
-    modelInput.addEventListener('input', function () {
-      configDraft.model = modelInput.value;
-    });
-
-    var baseInput = h('input', {
-      id: 'ai-base-url',
-      class: 'ca-input',
-      type: 'url',
-      value: configDraft.baseUrl,
-      placeholder: 'https://api.deepseek.com',
-      autocomplete: 'off'
-    });
-    baseInput.addEventListener('input', function () {
-      configDraft.baseUrl = baseInput.value;
-    });
-
-    var keyInput = h('input', {
-      id: 'ai-api-key',
-      class: 'ca-input',
-      type: 'password',
-      value: configDraft.apiKey,
-      placeholder: st.configured ? '已保存（不回显）。若要更换请重新输入' : '粘贴 API Key（仅本页会话）',
-      autocomplete: 'off'
-    });
-    keyInput.addEventListener('input', function () {
-      configDraft.apiKey = keyInput.value;
-    });
+    var facts = [];
+    facts.push(h('li', null, '接入方式：本机助手服务（密钥只在服务端 .env，页面不粘贴密钥）'));
+    facts.push(h('li', null, '模型：' + (st.model || 'deepseek-chat')));
+    facts.push(h('li', null, '状态：' + phaseLabel(phase)));
+    if (st.verify && st.verify.message) facts.push(h('li', null, st.verify.message));
+    if (st.reason) facts.push(h('li', null, st.reason));
 
     return h(
       'section',
@@ -160,73 +112,48 @@
       h(
         'div',
         { class: 'ca-section__head' },
-        h('h2', { id: 'ai-config-title', class: 'ca-section__title' }, '模型配置（本页会话）'),
+        h('h2', { id: 'ai-config-title', class: 'ca-section__title' }, '本机模型服务'),
         h('span', { class: 'ca-section__meta' }, ui.badge(phaseLabel(phase), tone))
       ),
       ui.notice(
         tone,
         st.configured
-          ? '提供方 ' +
-              st.label +
-              '｜模型 ' +
-              (st.model || '未写') +
-              (st.keyMasked ? '｜密钥 ' + st.keyMasked : '') +
-              '。' +
-              (st.verify && st.verify.message ? st.verify.message : '') +
-              ' 刷新页面后配置会清除。'
-          : '尚未接入真实 AI。默认提供方为 DeepSeek（api.deepseek.com／deepseek-chat）。密钥只留在当前页面会话，不写入本地业务存储。'
+          ? '已连接到本机助手服务。生成前请确认发送范围；返回的建议仍须你逐条核对，系统不能证明没有新增未经依据的内容。'
+          : '真实生成需要本机助手服务，并由服务端读取 DEEPSEEK_API_KEY。未连接或未配置时不能发起真实生成，也不会伪装成功。可用「本地演示建议」练习流程。'
       ),
-      h(
-        'div',
-        { class: 'ca-form ca-form--compact' },
-        h('div', { class: 'ca-field' }, h('label', { class: 'ca-label', for: 'ai-provider' }, '提供方'), providerSelect),
-        h('div', { class: 'ca-field' }, h('label', { class: 'ca-label', for: 'ai-model' }, '模型名称'), modelInput),
-        h(
-          'div',
-          { class: 'ca-field' },
-          h('label', { class: 'ca-label', for: 'ai-base-url' }, '服务地址'),
-          baseInput,
-          h('p', { class: 'ca-help' }, 'DeepSeek 官方兼容根地址为 https://api.deepseek.com（请求 /chat/completions）。')
-        ),
-        h('div', { class: 'ca-field' }, h('label', { class: 'ca-label', for: 'ai-api-key' }, 'API Key'), keyInput)
-      ),
+      h('ul', { class: 'ca-facts' }, facts),
       configMessage ? ui.notice(configMessage.tone || 'info', configMessage.text) : null,
       h(
         'div',
         { class: 'ca-actions' },
-        ui.button(configBusy ? '处理中…' : '保存到本会话', {
-          variant: 'primary',
+        ui.button(configBusy ? '检查中…' : '重新检查服务', {
+          variant: 'secondary',
           disabled: configBusy,
           onClick: function () {
-            if (configBusy) return;
-            var payload = {
-              provider: configDraft.provider,
-              model: configDraft.model,
-              baseUrl: configDraft.baseUrl,
-              apiKey: configDraft.apiKey
-            };
-            if (!payload.apiKey && !st.configured) {
-              configMessage = { tone: 'warn', text: '请先粘贴 API Key（仅保存在当前页面会话）。' };
-              ctx.app.rerender();
-              return;
-            }
+            if (configBusy || !AI.refreshStatus) return;
             configBusy = true;
-            configMessage = null;
+            configMessage = { tone: 'info', text: '正在检查本机助手服务…' };
             ctx.app.rerender();
-            var res = AI.setSessionConfig(payload);
-            configBusy = false;
-            if (!res.ok) {
-              configMessage = { tone: 'warn', text: res.error };
-            } else {
-              configDraft.apiKey = '';
-              configMessage = { tone: 'ok', text: '已保存到本会话。请点「验证连接」确认可用。' };
-              syncConfigDraftFromStatus(AI.getStatus());
-            }
-            ctx.app.rerender();
+            AI.refreshStatus().then(
+              function () {
+                configBusy = false;
+                var now = AI.getStatus();
+                configMessage = {
+                  tone: now.configured ? 'ok' : 'warn',
+                  text: now.configured ? '本机服务可用。' : now.reason || '本机服务不可用。'
+                };
+                ctx.app.rerender();
+              },
+              function () {
+                configBusy = false;
+                configMessage = { tone: 'warn', text: '检查失败。请确认已通过授权启动的本机地址打开页面。' };
+                ctx.app.rerender();
+              }
+            );
           }
         }),
         ui.button(configBusy ? '验证中…' : '验证连接', {
-          variant: 'secondary',
+          variant: 'primary',
           disabled: configBusy || !st.configured,
           onClick: function () {
             if (configBusy || !AI.getStatus().configured) return;
@@ -236,8 +163,7 @@
             AI.verifyConfig().then(
               function () {
                 configBusy = false;
-                configMessage = { tone: 'ok', text: '验证成功。生成前仍需确认发送范围。' };
-                syncConfigDraftFromStatus(AI.getStatus());
+                configMessage = { tone: 'ok', text: '验证成功。生成前仍需确认发送范围，并在采纳前检查建议内容。' };
                 ctx.app.rerender();
               },
               function (err) {
@@ -246,17 +172,6 @@
                 ctx.app.rerender();
               }
             );
-          }
-        }),
-        ui.button('清除配置', {
-          variant: 'ghost',
-          disabled: configBusy || (!st.configured && phase === 'unconfigured'),
-          onClick: function () {
-            AI.clearSessionConfig();
-            configDraft.apiKey = '';
-            syncConfigDraftFromStatus(AI.getStatus());
-            configMessage = { tone: 'info', text: '已清除本会话配置，状态回到未配置。' };
-            ctx.app.rerender();
           }
         })
       )
@@ -695,11 +610,11 @@
     page.appendChild(
       ui.notice(
         'warn',
-        '真实 AI 生成需要配置模型服务，通常会产生费用。未配置时不能发起真实生成，也不会用固定文案冒充已经向模型请求成功。密钥只留在当前页面会话，刷新后清除。'
+        '真实 AI 生成需要本机助手服务，通常会产生费用。未连接或未配置时不能发起真实生成，也不会用固定文案冒充已经向模型请求成功。密钥只由服务端读取，页面不粘贴、不保存密钥。'
       )
     );
     page.appendChild(renderContextMeta(job, goal, file, assessment));
-    page.appendChild(renderModelConfigPanel(ctx));
+    page.appendChild(renderBackendStatusPanel(ctx));
     if (!hasReadableText(file)) {
       page.appendChild(
         ui.statePanel('warn', '还没有简历正文', '请先编辑正文。没有正文时不会发送，也不会生成建议。', [
@@ -809,7 +724,7 @@
             null,
             aiStatus.willCallExternal
               ? '点击下方按钮后，岗位信息与简历正文将发送到外部模型服务，通常会产生费用。'
-              : '当前不会外发：' + (aiStatus.reason || '请先配置模型。')
+              : '当前不会外发：' + (aiStatus.reason || '请先连接本机助手服务。')
           ),
           h('li', null, '调用进度：' + callPhaseLabel(callPhase))
         )
@@ -821,9 +736,9 @@
         ui.statePanel(
           'warn',
           '尚未接入真实 AI',
-          '请返回上一步配置 DeepSeek（默认）或其他提供方并验证连接。也可直接使用本地演示建议练习流程——不会写成真实请求成功。',
+          '请返回上一步检查本机助手服务（须通过已授权启动的本机地址打开，并由服务端配置密钥）。也可直接使用本地演示建议练习流程——不会写成真实请求成功。',
           [
-            ui.button('返回配置', {
+            ui.button('返回检查服务', {
               variant: 'secondary',
               disabled: busy,
               onClick: function () {
@@ -836,10 +751,10 @@
       );
     } else if (phase === 'pending_verify') {
       page.appendChild(
-        ui.notice('warn', '配置已保存但尚未验证连接。建议先返回上一步点「验证连接」；也可直接尝试生成（失败时原简历与草稿保留）。')
+        ui.notice('warn', '本机服务已配置但尚未验证连接。建议先返回上一步点「验证连接」；也可直接尝试生成（失败时原简历与草稿保留）。')
       );
     } else if (phase === 'failed') {
-      page.appendChild(ui.notice('warn', '上次验证失败。请检查密钥或服务地址后重试验证，再生成。'));
+      page.appendChild(ui.notice('warn', '上次验证失败。请检查本机 .env 中的密钥配置后重试验证，再生成。'));
     } else if (phase === 'verified') {
       page.appendChild(
         ui.notice(
@@ -847,7 +762,7 @@
           '已验证：' +
             aiStatus.label +
             (aiStatus.model ? '／' + aiStatus.model : '') +
-            '。点击下方按钮才会发送内容；失败时原简历与草稿会保留。'
+            '。点击下方按钮才会发送内容；返回建议仍须你检查是否新增未经依据的内容；失败时原简历与草稿会保留。'
         )
       );
     }
@@ -1104,13 +1019,13 @@
       ui.notice(
         aiStatus.configured ? (aiStatus.configPhase === 'verified' ? 'info' : 'warn') : 'warn',
         aiStatus.configured
-          ? '模型配置状态：' +
+          ? '本机模型服务：' +
               phaseLabel(aiStatus.configPhase || 'pending_verify') +
               '（' +
               (aiStatus.label || '') +
               (aiStatus.model ? '／' + aiStatus.model : '') +
-              '）。生成前会再次确认发送范围。'
-          : '尚未接入真实 AI：默认推荐 DeepSeek。进入岗位后可配置密钥（仅本页会话），也可用「本地演示建议」练习，但不会显示真实生成成功。'
+              '）。生成前会再次确认发送范围；返回建议仍须你逐条检查。'
+          : '尚未接入真实 AI：需要本机助手服务读取密钥。进入岗位后可检查服务状态，也可用「本地演示建议」练习，但不会显示真实生成成功。'
       )
     );
     page.appendChild(

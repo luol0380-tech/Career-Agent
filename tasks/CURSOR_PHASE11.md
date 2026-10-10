@@ -1,8 +1,8 @@
 # Career Agent｜第十一阶段任务包：求职目标基本编辑
 
-状态：ready_for_cursor
-日期：2026-10-04
-前置：第七至第十阶段代码层面已 accepted；用户亲测仍可并行进行；契约增量草案已通过 Codex Review
+状态：paused
+日期：2026-10-09
+前置：契约增量曾 `accepted`（2026-10-04）；**用户于 2026-10-09 暂停本阶段施工**，优先第十二阶段后端 DeepSeek
 
 ## 目标
 让用户能够管理当前求职目标的基本信息：目标名称、目标岗位、城市、薪资期望。目标切换只改变当前上下文；历史 Application、Job、Interview 和事件中的 goalId 不得被改写。本阶段不做目标归档 UI；`CareerGoal.status` 语义保留但不通过本阶段命令改写。

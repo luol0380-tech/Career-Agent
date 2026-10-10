@@ -791,72 +791,40 @@ async function test(name, fn) {
     AI.setTestAdapter(null);
   });
 
-  await test('P7-01 DeepSeek 默认、会话配置／清除、验证态、密钥不落盘', async function () {
+  await test('P7/P12-01 页面不再保存密钥；未配置不可生成；文案可读；密钥不落盘', async function () {
     var AI = CA.lib.aiProvider;
     AI.setTestAdapter(null);
     AI.clearSessionConfig();
     AI.clearSafeLogs();
 
     var st0 = AI.getStatus();
-    assert(st0.configPhase === 'unconfigured', '清除后应为未配置');
-    assert(st0.defaults && st0.defaults.provider === 'deepseek', '默认提供方应为 deepseek');
-    assert(st0.defaults.model === 'deepseek-chat', '默认模型应为 deepseek-chat');
-    assert(st0.defaults.baseUrl.indexOf('api.deepseek.com') >= 0, '默认地址应为 DeepSeek');
-    assert(AI.PROVIDERS.deepseek.defaultBaseUrl === 'https://api.deepseek.com', 'PROVIDERS 缺 DeepSeek');
+    assert(st0.configPhase === 'unconfigured', '默认应为未接入');
+    assert(st0.configured === false, '默认不可外呼');
+    assert(st0.willCallExternal === false, '默认不应标记将外呼');
 
-    var bad = AI.setSessionConfig({ provider: 'deepseek', model: 'deepseek-chat', apiKey: '' });
-    assert(bad.ok === false, '空密钥不应保存');
-
-    var saved = AI.setSessionConfig({
+    var rejected = AI.setSessionConfig({
       provider: 'deepseek',
       model: 'deepseek-chat',
       baseUrl: 'https://api.deepseek.com',
-      apiKey: 'sk-test-phase7-not-real'
+      apiKey: 'sk-test-phase12-should-reject'
     });
-    assert(saved.ok === true, '有效配置应保存');
+    assert(rejected.ok === false, '页面粘贴密钥路径应被拒绝');
+    assert(String(rejected.error || '').indexOf('本机服务') >= 0 || String(rejected.error || '').indexOf('密钥') >= 0, '拒绝文案应说明改走本机服务');
+
     var st1 = AI.getStatus();
-    assert(st1.configPhase === 'pending_verify', '保存后应为已配置待验证');
-    assert(st1.configured && st1.willCallExternal === true, '应标记将外呼');
-    assert(st1.model === 'deepseek-chat' && st1.providerId === 'deepseek', '模型／提供方不对');
-    assert(st1.keyMasked && st1.keyMasked.indexOf('sk-') === 0 && st1.keyMasked.indexOf('sk-test-phase7-not-real') < 0, '应遮罩密钥');
+    assert(st1.configured === false, '拒绝后仍不应变为已配置');
 
     var svc = makeService();
     await svc.service.loadWorkspace();
     var stored = svc.driver.peek(C.STORAGE_KEY) || '';
-    assert(String(stored).indexOf('sk-test-phase7-not-real') < 0, '密钥不得写入业务存储');
-    // 再写入一次配置后确认 peek 仍无密钥
-    AI.setSessionConfig({
-      provider: 'deepseek',
-      model: 'deepseek-chat',
-      apiKey: 'sk-test-phase7-not-real'
-    });
-    stored = svc.driver.peek(C.STORAGE_KEY) || '';
-    assert(String(stored).indexOf('sk-test-phase7-not-real') < 0, '再次配置后密钥仍不得写入业务存储');
+    assert(String(stored).indexOf('sk-test-phase12-should-reject') < 0, '密钥不得写入业务存储');
 
-    var cleared = AI.clearSessionConfig();
-    assert(cleared.configPhase === 'unconfigured' && cleared.configured === false, '清除后应回到未配置');
     await expectReject(
       AI.generateResumeSuggestions({ resumeText: 'x', job: { id: 'j', title: 't', companyName: 'c', jdText: 'd' } }),
       'not_configured',
-      '清除后不可生成'
+      '未配置不可生成'
     );
 
-    // 格式错误路径：mock 返回无法对应原文的建议
-    AI.setTestAdapter(
-      AI.createMockAdapter({
-        suggestions: [
-          {
-            id: 'bad',
-            title: '坏建议',
-            reason: 'r',
-            targetExcerpt: '这段原文根本不存在XYZ',
-            proposedReplacement: '伪造内容',
-            needsUserConfirm: false
-          }
-        ]
-      })
-    );
-    // mock 直接返回 suggestions，不走 parse；改用会失败的 failCode=format
     AI.setTestAdapter(AI.createMockAdapter({ fail: true, failCode: 'format', failMessage: AI.userFacingError('format') }));
     await expectReject(
       AI.generateResumeSuggestions({
@@ -869,13 +837,14 @@ async function test(name, fn) {
     var msg = AI.userFacingError('timeout');
     assert(msg.indexOf('超时') >= 0, '超时文案不可理解');
     assert(AI.userFacingError('auth').indexOf('密钥') >= 0, '权限文案不可理解');
+    assert(AI.userFacingError('offline').indexOf('本机') >= 0, '离线文案应提示本机服务');
     assert(AI.userFacingError('rate_limit').indexOf('额度') >= 0 || AI.userFacingError('rate_limit').indexOf('次') >= 0, '限额文案');
 
     var logs = AI.getSafeLogs();
     assert(
       logs.every(function (l) {
         var s = JSON.stringify(l);
-        return s.indexOf('sk-test-phase7-not-real') < 0;
+        return s.indexOf('sk-test-phase12-should-reject') < 0;
       }),
       '安全日志不得含完整密钥'
     );

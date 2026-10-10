@@ -92,7 +92,9 @@
   font-size: 17px;
   letter-spacing: 0.01em;
 }
-.ca-brand__title-group { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.ca-brand__title-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ca-brand__name { display: inline-flex; align-items: center; gap: 10px; }
+.ca-brand__logo { width: 42px; height: 42px; flex: 0 0 auto; align-self: center; }
 .ca-brand__tagline { color: #716e6b; font-size: 13px; white-space: nowrap; }
 .ca-demo-mark {
   display: inline-block;
@@ -1164,7 +1166,7 @@
   padding: 14px 28px;
 }
 .ca-brand__name {
-  display: inline-block;
+  display: inline-flex;
   flex: 0 0 auto;
   color: var(--ca-ink);
   font-size: 20px;

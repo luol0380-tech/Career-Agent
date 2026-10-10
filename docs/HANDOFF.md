@@ -2,20 +2,21 @@
 
 ## 当前状态
 
-- 更新日期：2026-10-04
-- 当前任务：`CURSOR-PHASE11`
+- 更新日期：2026-10-10
+- 当前任务：`CURSOR-PHASE12`
 - 状态：`ready_for_review`
-- 当前实现负责人：Cursor（仅契约草案修订，未改 app／正式契约）
+- 当前实现负责人：Cursor（R12-01～R12-04 已修正，待 Codex 复审）
 - 当前 Review 负责人：Codex
-- 契约版本：`0.1`（本阶段拟增量，待 Codex 再次 Review 后方可写入正式契约与代码）
-- 任务包：[第十一阶段施工](../tasks/CURSOR_PHASE11.md)（`ready_for_review`；契约草案已按 changes_requested 三项修订）
-- 第七至第十阶段：代码层面已 `accepted`；用户亲测可并行。
-- 当前已有：第一～十阶段实现；本文件下方「第十一阶段契约增量草案」（2026-10-04 修订版）。
-- 当前没有：Goal 编辑／新增的实现与正式契约正文修改；未启动服务；未 commit。
+- 契约版本：`0.1`（业务实体字段不改；本机 AI 代理不新增业务事件）
+- 任务包：[第十二阶段施工](../tasks/CURSOR_PHASE12.md)（`ready_for_review`）
+- 第十一阶段：目标编辑**暂停**。
+- 第七至第十阶段：代码层面已 `accepted`。
+- 当前已有：第十二阶段修正交付（超时／本机监听／严格校验／同源 mock 端到端）。
+- 当前没有：用户授权启动的正式服务进程；真实 DeepSeek 外呼验收结论。
 
 ## 启动给 Codex 的消息
 
-请再次 Review 本文件「第十一阶段契约增量草案（求职目标基本编辑与新增）」修订版。核对三项修正是否闭合：`occurredAt: null`；`career_goal.created` payload 含 `revision: 1` 且不含 createdAt／updatedAt；本阶段命令／事件不含 status／归档。批准前**不要**授权改正式契约或 `app/`。
+R12-01～R12-04 已修正并交 `ready_for_review`。请对照下文「修正对照」与测试证据独立复审。未启动项目正式服务、未真实外呼、未输出密钥、未 commit。
 
 ## 协作约定
 
@@ -23,8 +24,8 @@
 - 上述是施工交接状态，与产品内 Application／TaskRun 状态无关。
 - Cursor 接单后更新状态和负责人；Codex 做 Review 时先读本文件，再读实际实现。
 - 一次仅有一个实现负责人。Cursor 实现中，Codex 不同时改同一批代码。
-- 契约草案阶段：只写 HANDOFF 问题区，不改正式契约文件、不改 app，直至 Codex accepted 该草案。
-- 只有用户明确授权运行服务或部署时才执行相应动作；交接状态变化不能代替授权。
+- 契约／接口草案阶段：写 HANDOFF 与任务包，不改正式 `DATA_SCHEMA`／`STATE_EVENT_MODEL` 正文、不改 app，直至 Codex accepted。
+- **未经用户明确要求，不启动、不停止项目服务。**
 
 ## Cursor 实现记录
 
@@ -655,3 +656,243 @@
 - 复核通过：`occurredAt=null`／`recordedAt` 规则已定死；`career_goal.created` 明确 `revision=1` 且不重复写时间；P11 已移除 status／归档入口，`changedFields` 闭集仅含四类内容字段。
 - 任务包 `tasks/CURSOR_PHASE11.md` 已改为 `ready_for_cursor`。
 - 施工授权：Cursor 可先同步 `DATA_SCHEMA.md`／`STATE_EVENT_MODEL.md` 的正式增量，再进入 app 实现；完成后必须回到 `ready_for_review`，由 Codex 独立复审。
+
+## 方向调整与第十一阶段暂停（2026-10-09）
+
+- 用户明确：当前研发转向**实际可用版本**；**暂停第十一阶段目标编辑施工**（契约草案与 accepted 结论保留备查，不进入 app／正式契约写入，直至用户重新授权）。
+- 新当前任务：`CURSOR-PHASE12` 后端接入 DeepSeek，打通真实简历修改；本轮只交接口／数据／测试方案 Review，**不实现、不启动服务**。
+
+## 第十二阶段接口／数据／测试草案（后端 DeepSeek 代理）
+
+> Cursor 只读：`AGENTS.md`、本 HANDOFF、`app/lib/ai-provider.js`、`app/lib/revise-prompt.js`、`app/features/revise-resume.js`、第七阶段任务边界。**未修改** app／正式契约、**未读取或输出** `.env` 内容、**未启动服务**。任务包：`tasks/CURSOR_PHASE12.md`。
+
+### 1. 问题
+
+- Phase 6–7 已支持浏览器会话粘贴 Key 直连 DeepSeek，但密钥出现在前端进程，file:// 演示也不适合作为「实际可用」主路径。
+- 用户要求：服务端读本机 `.env` 的 `DEEPSEEK_API_KEY`；前端只提交简历正文与岗位要求；返回可采纳建议；失败保留原稿可重试；禁编造；不输出／提交密钥。
+- 现仓库无后端目录；`AGENTS.md` 禁止未经授权启动服务——实现与验收需把「写代码」和「启动进程」分开。
+
+### 2. 影响
+
+- 主生成路径从「前端持钥外呼」改为「前端 → 本机代理 → DeepSeek」；页面配置态文案需改为「后端是否可用」。
+- `file://` 打开前端时，跨源调用本机 API 依赖 CORS 或改为同源静态＋API（推荐后者，待 Codex 确认）。
+- 业务实体（ResumeFile／DocumentVersion）语义不变；仍经现有采纳／保存命令写入。
+
+### 3. 最小建议（接口）
+
+建议目录：`server/`（Node 原生 `http`，无强制框架）。配置：项目根 `.env`（已在 `.gitignore`）；提交 `.env.example` 仅占位名。
+
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| `GET` | `/api/ai/status` | 返回是否已配置 Key（布尔）、默认模型名、是否会外呼；**永不返回密钥** |
+| `POST` | `/api/ai/verify` | 短探测 chat（不发简历）；成功／失败用户可读文案 |
+| `POST` | `/api/ai/revise-suggestions` | 生成结构化建议 |
+
+**`POST /api/ai/revise-suggestions` 请求（JSON）**
+
+```json
+{
+  "resumeText": "…",
+  "job": {
+    "id": "job_001",
+    "title": "…",
+    "companyName": "…",
+    "location": "…",
+    "salaryText": "…",
+    "jdText": "…"
+  },
+  "assessment": null
+}
+```
+
+- `assessment` 可选；若传，仅作「本地演示评估摘要」提示，服务端提示词须标明非模型结论（与现 `revise-prompt` 一致）。
+- 服务端用同一套系统提示硬性规则：须引用原文；不得编造经历／数字／技能；输出 3–5 条 JSON 数组。
+
+**成功响应（JSON）**
+
+```json
+{
+  "ok": true,
+  "providerId": "deepseek",
+  "model": "deepseek-chat",
+  "suggestions": [
+    {
+      "id": "1",
+      "title": "…",
+      "reason": "…",
+      "targetExcerpt": "必须是简历原文子串",
+      "proposedReplacement": "…",
+      "needsUserConfirm": false
+    }
+  ]
+}
+```
+
+**失败响应（JSON）**
+
+```json
+{
+  "ok": false,
+  "code": "not_configured|auth|rate_limit|timeout|format|upstream|bad_request",
+  "message": "面向用户的下一步说明"
+}
+```
+
+- HTTP：未配置 Key → 503／`not_configured`；入参缺正文或岗位 → 400／`bad_request`；上游失败映射既有用户文案码；格式校验失败 → `format`（不返回半套建议）。
+
+**`GET /api/ai/status` 示例**
+
+```json
+{
+  "configured": true,
+  "providerId": "deepseek",
+  "model": "deepseek-chat",
+  "willCallExternal": true
+}
+```
+
+### 4. 数据变化
+
+| 层 | 变化 |
+| --- | --- |
+| 业务存储包（localStorage） | **不新增**必选字段／事件；生成元数据仍可仅页面会话（同 Phase 6–7）。 |
+| 环境 | `.env`：`DEEPSEEK_API_KEY`（必填才外呼）；可选 `DEEPSEEK_BASE_URL`（默认 `https://api.deepseek.com`）、`DEEPSEEK_MODEL`（默认 `deepseek-chat`）、`PORT`。 |
+| 前端配置 | 增加本机 API 根地址（如默认 `http://127.0.0.1:8787`）；**不再要求**用户粘贴 Key 作为主路径。 |
+| 正式 DATA_SCHEMA／STATE_EVENT_MODEL | 本阶段默认**不改**；若 Codex 要求把「AI 代理调用」记入事件闭集，另开问题条目后再改。 |
+
+### 5. 前端行为（实现时，非本轮）
+
+1. 准备步：拉取 `/api/ai/status`；展示后端是否可用、模型名、发送范围；用户确认后才请求。
+2. 生成：`POST /api/ai/revise-suggestions`；调用态准备中／请求中／成功／失败。
+3. 成功：沿用现有 `parseModelSuggestions` 等价校验（服务端已校则前端再校一次）；进入采纳流程。
+4. 失败：不改 `ResumeFile.textDraft`、不写岗位草稿；可重试；可改用本地演示建议。
+5. 服务未启动：明确提示「本机助手服务未连接」，不伪装生成成功。
+
+### 6. 测试方案
+
+| 类型 | 内容 | 真实外呼 |
+| --- | --- | --- |
+| 逻辑 | 提示词／解析／禁编造校验（既有 P6／P7）；服务端纯函数：缺 Key、坏 JSON、非原文引用 → 失败 | 否 |
+| 后端单测／脚本 | mock DeepSeek：成功、401、429、超时、格式错误 | 否 |
+| 浏览器 | 代理成功（mock）、失败保留原稿、未配置／连不上服务的文案；演示路径仍可用 | 否 |
+| 真实联调 | 仅当本机 `.env` 有 Key **且用户明确授权启动服务** 后手工验证；结果写「真实调用已验证／未验证」 | 按授权 |
+
+安全检查：仓库与日志扫描不得出现真实 Key；HANDOFF／截图不含密钥与完整真实简历。
+
+### 7. 待 Codex 拍板
+
+1. **托管方式**：仅 API 进程 + 仍用 `file://`（需 CORS） vs **同一 Node 进程同时托管 `app/` 静态与 API**（推荐，避免 file:// CORS）。用户授权启动前只写代码不跑进程。
+2. **是否保留**前端会话粘贴 Key 作为降级；建议默认关闭或折叠为「高级／调试」。
+3. **是否需要**业务事件记录「曾请求模型」（无密钥、无正文）；默认不需要，以免扩大契约。
+4. Phase 11 暂停期间，已 accepted 的 Goal 契约是否冻结不入库——建议冻结，直到用户重新授权目标编辑。
+
+### 施工门禁
+
+- Codex 对本草案与 `tasks/CURSOR_PHASE12.md` `accepted` 之前：不实现、不改正式契约、不启动服务、不 commit。
+- accepted 后：Cursor 将 HANDOFF 改为 `implementing` 再写 `server/` 与前端适配；**启动服务仍须用户另一次明确授权**。
+
+## Codex 第十二阶段方案 Review（2026-10-09）
+
+- 结论：accepted（接口与实现方案）；任务包改为 ready_for_cursor，允许 Cursor 开始实现。
+- 已读取实际 ai-provider 与 revise-prompt，确认可以复用现有建议格式和采纳流程；本轮为方案审核，无实现代码交付，未运行测试或真实外呼。
+- 决策：同源静态＋API，仅监听 127.0.0.1；正常入口移除前端密钥配置；不新增业务事件；P11 冻结。
+- 实现约束已补入任务包：静态资源白名单、保护 .env／.git、路径校验、同源 POST 检查、请求大小与超时、错误脱敏。原文引用校验不等于事实核验，仍须用户检查建议。
+- Cursor 开工先记录 implementing；交付代码与测试证据后记录 ready_for_review。启动服务仍待用户明确授权。
+
+## Cursor 第十二阶段交付记录（implementing → ready_for_review，2026-10-10）
+
+### 完成内容
+
+1. **本机同源服务** `server/`：Node 原生 `http`，仅设计监听 `127.0.0.1`；托管 `app/` 静态白名单；接口 `GET /api/ai/status`、`POST /api/ai/verify`、`POST /api/ai/revise-suggestions`。
+2. **密钥**：仅服务端自项目根 `.env` 读取 `DEEPSEEK_API_KEY`（可选 `DEEPSEEK_BASE_URL`／`DEEPSEEK_MODEL`／`HOST`／`PORT`）；提交 `.env.example`；`.gitignore` 已忽略 `.env`。
+3. **安全**：路径穿越拒绝；POST 校验 Host／Origin 与 JSON；体上限 256 KiB；外呼超时 60s；日志仅状态／条数／错误码；上游错误脱敏。
+4. **提示词**：服务端 `vm` 加载同一套 `app/lib/revise-prompt.js`；原文引用校验；不合规返回 `format`，不伪造成功。
+5. **前端**：`ai-provider` 改走同源相对路径；`file://` 明确离线；`setSessionConfig` 拒绝页面粘贴密钥；测试适配器保留；代理失败不静默降级为直连／演示成功。
+6. **改简历页**：准备步改为「本机模型服务」状态／检查／验证；无 API Key 输入框；发送范围二次确认与演示路径保留；提醒用户检查新增事实。
+7. **未做**：未启动服务；未真实外呼；未 commit；未新增业务事件；第十一阶段仍暂停。
+
+### 主要文件
+
+- 新增：`server/index.js`、`server/lib/{env,prompt,deepseek,static,handlers}.js`、`server/tests/handlers-check.js`、`.env.example`
+- 修改：`app/lib/ai-provider.js`、`app/features/revise-resume.js`、`app/tests/logic-check.js`、`app/tests/browser-check.js`、`tasks/CURSOR_PHASE12.md`、本 HANDOFF
+
+### 测试结果（本机，无真实外呼）
+
+| 检查 | 结果 |
+| --- | --- |
+| `node app/tests/logic-check.js` | 通过 35／35 |
+| `node server/tests/handlers-check.js` | 通过 5／5（mock；不绑定端口、不读真实密钥） |
+| `node app/tests/browser-check.js` | 通过 36／36（含 P7/P12-A：file:// 离线、拒绝页面密钥、演示可用） |
+| 真实 DeepSeek 调用 | **未验证**（未经用户授权启动服务） |
+
+### 待授权后的亲测步骤（请用户明确同意后再执行）
+
+1. 确认本机已有 `.env`（可由 `.env.example` 复制），填入 `DEEPSEEK_API_KEY`（**勿把密钥发到聊天或提交仓库**）。
+2. 在项目根授权启动：`node server/index.js`（默认 `http://127.0.0.1:8787/`）。
+3. 用该地址打开应用（不要用 `file://`），进入「帮我改简历」→ 选岗位。
+4. 应看到「本机模型服务」为已配置或验证相关状态；点「验证连接」（不发送简历）。
+5. 勾选发送范围 → 生成建议 → 逐条检查是否新增未经依据的内容 → 采纳／跳过／改写 →「保存为新草稿」；确认原简历正文未变。
+6. 可再试：停服务或清空 Key 后刷新，应明确不可用、不伪装成功；本地演示建议仍可用。
+
+### 给 Codex Review 的要点
+
+- 是否符合四项 accepted 决定：同源静态＋API、移除前端密钥、不增事件、P11 暂停。
+- 静态白名单／同源／体大小／超时／脱敏是否到位。
+- 前端是否仍可能直连或静默演示成功。
+- 原文引用校验文案是否仍提醒用户核验事实。
+
+## Codex 第十二阶段独立 Review（2026-10-10）
+
+- 结论：changes_requested；实际代码已交付，暂不 accepted。修复负责人：Cursor。
+- 独立检查：逻辑 35/35、后端 mock 5/5 通过；未启动服务、未外呼、未读取真实密钥。本轮浏览器未重跑，Cursor 的 36/36 仅为提交证据；现有浏览器用例主要覆盖 file:// 离线，不能证明同源生成链路可用。
+- 必修 R12-01：server/lib/deepseek.js 收到响应头即清除超时，res.json() 读取响应体不受 60 秒保护。独立 mock 设置 15ms 超时、响应体延迟 80ms，实际仍成功（约 80ms，signal 未取消）。计时器应覆盖完整响应读取与解析，在 finally 清理；补响应头正常但响应体阻塞的回归。
+- 必修 R12-02：env.js 允许 HOST 覆盖、index.js start(opts) 允许任意 host，违反仅监听 127.0.0.1 的已接受边界。固定本机监听或拒绝非回环地址，补配置回归；不要输出密钥。
+- 必修 R12-03：后端入参将 job.title／jdText 等强转字符串，未严格验证类型；公司、地点、薪资与 assessment 无明确字段限制。按已批准的字段类型／长度要求白名单校验；无有效 JD 时不能当成岗位定向生成成功，补坏类型与缺岗位要求的测试。
+- 补证 R12-04：补前端同源 mock 成功、失败保留草稿与重试的端到端证据，不能仅以 file:// 离线用例作为代理验收。未经用户授权不得启动项目服务，可采用浏览器请求拦截与测试适配；真实联调仍待授权。
+
+## Cursor 第十二阶段修正记录（changes_requested → ready_for_review，2026-10-10）
+
+### 修正对照
+
+| 编号 | 问题 | 处理 |
+| --- | --- | --- |
+| R12-01 | 响应头到达即清超时，体读取不受保护 | `deepseek.chatCompletions`：计时器保留至 `res.json()` 完成，在 `finally` 清理；`R12-01` 回归：15ms 超时＋体延迟 80ms → `timeout`，窗口足够则成功 |
+| R12-02 | HOST／start 可监听非本机 | `env.resolveListenHost` 仅允许 `127.0.0.1`／`localhost`／`::1`，否则 `invalid_host`；`start` 一律经该函数；`.env.example` 注明；`R12-02` 配置回归 |
+| R12-03 | 字段强转、缺 JD 仍可能放行 | `validateReviseInput`：文本字段严格 `typeof === 'string'`＋长度上限；缺／空 JD 拒绝；assessment 白名单清洗；`R12-03` 坏类型／缺 JD 测试 |
+| R12-04 | 仅有 file:// 离线证据 | 新增测试用同源 mock（`server/tests/same-origin-mock-server.js`，临时 `127.0.0.1:0`，**不是** `node server/index.js`）；浏览器 `P12-B`：失败保留原稿 → 重试成功 → 保存岗位草稿 |
+
+### 主要改动文件
+
+- `server/lib/deepseek.js`、`server/lib/env.js`、`server/lib/handlers.js`、`server/index.js`
+- `server/tests/handlers-check.js`、`server/tests/same-origin-mock-server.js`
+- `app/tests/browser-check.js`、`.env.example`、本 HANDOFF、`tasks/CURSOR_PHASE12.md`
+
+### 测试证据（无真实外呼；未启动项目正式服务）
+
+| 检查 | 结果 |
+| --- | --- |
+| `node app/tests/logic-check.js` | 通过 35／35 |
+| `node server/tests/handlers-check.js` | 通过 8／8（含 R12-01／02／03） |
+| `node app/tests/browser-check.js` | 通过 37／37（含 P7/P12-A file:// 离线；P12-B 同源 mock 失败重试） |
+| 真实 DeepSeek 调用 | **未验证**（待用户明确授权启动正式服务） |
+
+### 说明
+
+- P12-B 使用的临时 mock 仅服务验收脚本，监听 `127.0.0.1` 随机端口，测完关闭；与授权后的 `node server/index.js` 正式服务分离。
+- 未 commit；未读取或输出真实密钥。
+- 修正完成后回到 ready_for_review；用户亲测待进行，不阻塞上述修复。
+
+## 品牌局部调整（2026-10-10）
+
+- 用户授权本次局部修复由 Codex 实现：页头与浏览器标题改为“猫猫求职助手”，新增黄色猫咪 SVG Logo，沿用现有视觉风格。
+- 修改 app/index.html、app/styles.css；未运行浏览器验收，待用户刷新亲测；未提交、未启动服务。
+
+- 用户进一步明确要求移除页头“合成演示数据｜Demo Beta”标签，已局部修改 app/index.html；数据与具体演示能力说明不变。未运行浏览器验收，待刷新亲测。
+
+- 页头对齐修复：品牌组由基线对齐改为垂直居中，使猫咪 Logo、标题与一句话介绍位于同一中心线；待用户刷新确认。
+
+## Codex 第十二阶段修正复审（2026-10-10）
+
+- R12-01～R12-04 已复核：完整读取超时、回环地址限制、输入校验与同源重试链路已修正。独立复跑逻辑 35/35、后端 8/8；浏览器 36/37，P12-B 同源失败→重试→保存通过。未启动正式项目服务、未真实外呼。
+- 状态 changes_requested：剩余 A10 测试仍强制要求旧页头 Demo 标记，与用户明确授权删除标签的最新需求冲突。这不是模型链路缺陷；请 Cursor 更新旧验收断言，仅检查仍适用的来源／确认／保存位置与具体演示能力说明，不恢复用户删除的标签；补记录并重跑后交复审。
+- 真实调用及用户亲测仍未验证。

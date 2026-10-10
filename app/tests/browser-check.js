@@ -14,6 +14,7 @@ var ENTRY = 'file://' + path.join(ROOT, 'app', 'index.html');
 var OUT = path.join(ROOT, 'assets', 'screenshots', 'phase1');
 var CHROME = process.argv[2] || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 var KEY = 'career-agent.demo.v1';
+var startSameOriginMock = require('../../server/tests/same-origin-mock-server').startSameOriginMock;
 
 fs.mkdirSync(OUT, { recursive: true });
 var profileDir = fs.mkdtempSync(path.join(ROOT, '.tmp-chrome-'));
@@ -784,7 +785,7 @@ async function main() {
     }
   });
 
-  await check('P7-A', '配置区状态：未配置→待验证→清除；密钥不进存储；本地演示可用', async function () {
+  await check('P7/P12-A', '本机服务状态区；file:// 离线提示；拒绝页面密钥；本地演示可用', async function () {
     try {
       await goto(ENTRY + '?test=isolated#/home');
       await helpers();
@@ -796,31 +797,19 @@ async function main() {
       await sleep(450);
       await helpers();
       var prepare = await evaluate("document.querySelector('#ca-view').textContent");
-      assert(prepare.indexOf('模型配置') >= 0, '缺少模型配置区');
-      assert(prepare.indexOf('未配置') >= 0 || prepare.indexOf('DeepSeek') >= 0, '应展示未配置或 DeepSeek 默认');
-      assert(prepare.indexOf('api.deepseek.com') >= 0 || prepare.indexOf('deepseek-chat') >= 0, '应展示 DeepSeek 默认地址或模型');
+      assert(prepare.indexOf('本机模型服务') >= 0 || prepare.indexOf('本机助手') >= 0, '缺少本机服务状态区');
+      assert(prepare.indexOf('未接入') >= 0 || prepare.indexOf('未连接') >= 0 || prepare.indexOf('未配置') >= 0, 'file:// 下应提示未接入');
+      assert(prepare.indexOf('不粘贴') >= 0 || prepare.indexOf('页面不') >= 0 || prepare.indexOf('.env') >= 0, '应说明密钥不在页面粘贴');
+      assert(prepare.indexOf('ai-api-key') < 0 && (await evaluate("!!document.querySelector('#ai-api-key')")) === false, '不得出现密钥输入框');
 
-      await evaluate(
+      var rejectPaste = await evaluate(
         "CareerAgentTest.setAiSessionConfig({provider:'deepseek',model:'deepseek-chat',baseUrl:'https://api.deepseek.com',apiKey:'sk-p7-browser-fake'})"
       );
-      await evaluate("CareerAgentTest.refresh()");
-      await sleep(300);
-      await hash('#/resume/revise?job=job_001');
-      await helpers();
-      var pending = await evaluate("document.querySelector('#ca-view').textContent");
-      assert(pending.indexOf('已配置待验证') >= 0 || pending.indexOf('待验证') >= 0, '保存后应显示待验证');
-      var maskedOk = await evaluate("CareerAgentTest.getAiStatus().keyMasked && CareerAgentTest.getAiStatus().keyMasked.indexOf('sk-p7-browser-fake')<0");
-      assert(maskedOk === true, '页面状态不应回显完整密钥');
+      assert(rejectPaste && rejectPaste.ok === false, '页面粘贴密钥应被拒绝');
       var stored = await evaluate("CareerAgentTest.peekStored() || ''");
       assert(String(stored).indexOf('sk-p7-browser-fake') < 0, '业务存储不得含密钥');
-
-      await evaluate("CareerAgentTest.clearAiSessionConfig()");
-      await evaluate("CareerAgentTest.refresh()");
-      await sleep(250);
-      await hash('#/resume/revise?job=job_001');
-      await helpers();
-      var cleared = await evaluate("document.querySelector('#ca-view').textContent");
-      assert(cleared.indexOf('未配置') >= 0 || (await evaluate("CareerAgentTest.getAiStatus().configPhase")) === 'unconfigured', '清除后应回到未配置');
+      var status = await evaluate('CareerAgentTest.getAiStatus()');
+      assert(status.configured === false, '拒绝粘贴后仍未配置');
 
       await evaluate("document.querySelector('#revise-send-confirm').click()");
       await evaluate("__t.click('button', '下一步：生成建议')");
@@ -831,10 +820,87 @@ async function main() {
       var demoPage = await evaluate("document.querySelector('#ca-view').textContent");
       assert(demoPage.indexOf('不是真实 AI') >= 0 || demoPage.indexOf('本地演示') >= 0, '演示路径未标明非真实 AI');
       await shot('P7-config-demo-desktop', true);
-      return '配置态清晰；清除恢复未配置；密钥不落盘；本地演示可用';
+      return '本机服务状态清晰；file:// 离线；拒绝页面密钥；本地演示可用';
     } finally {
       await evaluate('CareerAgentTest.clearAiProvider()');
       await evaluate('CareerAgentTest.clearAiSessionConfig()');
+      await goto(ENTRY + '#/home');
+      await helpers();
+    }
+  });
+
+  await check('P12-B', '同源 mock：生成失败保留原稿并可重试成功（非项目正式服务）', async function () {
+    var mock = null;
+    try {
+      mock = await startSameOriginMock();
+      mock.state.failNextRevise = true;
+      var originEntry = mock.baseUrl + '/index.html';
+      await goto(originEntry + '?test=isolated#/home');
+      await helpers();
+      await evaluate('CareerAgentTest.clearAiProvider()');
+      await evaluate('CareerAgentTest.clearAiSessionConfig()');
+      await evaluate(
+        "(async function(){ await CareerAgentTest.service.resetDemo({confirmed:true}); await CareerAgentTest.refresh(); var r=await CareerAgentTest.service.recordResumeFileUpload({fileName:'p12-origin.pdf',byteSize:520,mimeType:'application/pdf',status:'pending_confirm',readError:null,commandId:'p12_up'}); await CareerAgentTest.service.saveResumeFileText({fileId:r.fileId,text:'林小舟｜产品助理\\n智能客服知识库问答\\n与算法同事制定人工抽检规则',commandId:'p12_txt'}); await CareerAgentTest.refresh(); location.hash='#/resume/revise?job=job_001'; })()"
+      );
+      await sleep(500);
+      await helpers();
+      await waitFor(
+        "CareerAgentTest.getAiStatus().configured===true",
+        6000,
+        '同源 status 已配置'
+      );
+      var prepare = await evaluate("document.querySelector('#ca-view').textContent");
+      assert(prepare.indexOf('本机模型服务') >= 0 || prepare.indexOf('DeepSeek') >= 0, '同源页应显示本机服务状态');
+      assert((await evaluate("!!document.querySelector('#ai-api-key')")) === false, '同源页不得出现密钥输入框');
+
+      var original = await evaluate("__t.stored().data.files.filter(function(f){return f.fileName==='p12-origin.pdf';})[0].textDraft");
+      await evaluate("document.querySelector('#revise-send-confirm').click()");
+      await evaluate("__t.click('button', '下一步：生成建议')");
+      await sleep(300);
+      await helpers();
+      var genPage = await evaluate("document.querySelector('#ca-view').textContent");
+      assert(
+        genPage.indexOf('向模型请求建议') >= 0 || genPage.indexOf('本机') >= 0,
+        '生成步应可用：' + genPage.slice(0, 160)
+      );
+      await evaluate("__t.click('button', '向模型请求建议')");
+      await waitFor(
+        "document.querySelector('.ca-form-error') && (document.querySelector('.ca-form-error').textContent.indexOf('不可用')>=0 || document.querySelector('.ca-form-error').textContent.indexOf('失败')>=0 || document.querySelector('.ca-form-error').textContent.indexOf('重试')>=0)",
+        8000,
+        '同源失败提示'
+      );
+      assert(
+        (await evaluate("__t.stored().data.files.filter(function(f){return f.fileName==='p12-origin.pdf';})[0].textDraft")) === original,
+        '失败不得覆盖原简历'
+      );
+      assert((await evaluate("document.querySelectorAll('.ca-suggest').length")) === 0, '失败不得写入建议');
+      assert(mock.state.reviseCalls >= 1, '应已调用同源 revise 接口，实际：' + mock.state.reviseCalls);
+
+      await evaluate("__t.click('.ca-form-error button', '重试生成')");
+      await waitFor("document.querySelectorAll('.ca-suggest').length>=3", 8000, '同源重试成功');
+      var review = await evaluate("document.querySelector('#ca-view').textContent");
+      assert(review.indexOf('模型返回') >= 0 || review.indexOf('检查') >= 0, '应进入检查步');
+      await evaluate("__t.click('.ca-suggest button', '采纳')");
+      await sleep(150);
+      await evaluate("__t.click('button', '保存为新草稿')");
+      await waitFor(
+        "(function(){ var docs=__t.stored().data.documents.filter(function(d){return d.jobId==='job_001'&&d.draft&&d.draft.parameters.variant==='tailored';}); if(!docs.length)return false; return __t.stored().data.documentVersions.some(function(v){return v.documentId===docs[0].id&&!v.userConfirmed;}); })()",
+        6000,
+        '同源成功后保存草稿'
+      );
+      assert(
+        (await evaluate("__t.stored().data.files.filter(function(f){return f.fileName==='p12-origin.pdf';})[0].textDraft")) === original,
+        '保存后原简历被覆盖'
+      );
+      assert(mock.state.reviseCalls >= 2, '重试应再次调用同源 revise');
+      await shot('P12-same-origin-retry-desktop', true);
+      return '同源 mock 失败保留原稿并可重试成功；未启动项目正式服务';
+    } finally {
+      try {
+        await evaluate('CareerAgentTest.clearAiProvider()');
+        await evaluate('CareerAgentTest.clearAiSessionConfig()');
+      } catch (e) {}
+      if (mock) await mock.close();
       await goto(ENTRY + '#/home');
       await helpers();
     }
@@ -1495,7 +1561,7 @@ function cleanup(code) {
 var overall = setTimeout(function () {
   console.error('整体超时');
   cleanup(2);
-}, 240000);
+}, 300000);
 
 main().then(
   function (failed) {
